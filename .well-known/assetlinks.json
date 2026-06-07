@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.bareqaljuboori.visionvr",
+      "sha256_cert_fingerprints": [
+        "37:15:89:1F:B6:A1:F3:C1:FB:B7:DC:78:18:BC:1B:6B:B0:3D:0C:A0:A7:25:37:FC:5F:68:7A:B3:35:2A:41:47"
+      ]
+    }
+  }
+]
