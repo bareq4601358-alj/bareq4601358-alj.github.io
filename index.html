@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<!--
+  Vision Training VR
+  Copyright (C) 2026 Bareq Aljuboori
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Vision Training · VR</title>
+  <meta name="theme-color" content="#08080c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Vision VR">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <!-- 1.6.x has WebXR fixes vs 1.5 on some Quest / Meta Browser builds.
+       Bundled locally so the installed Quest PWA works without any network. -->
+  <script src="vendor/aframe-1.6.0.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: #08080c; font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #ccc; overflow: hidden; }
+    a-scene { width: 100vw; height: 100vh; }
+
+    /* HTML overlay (used outside immersive VR; auto-hidden inside the headset). */
+    #overlay { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+    #overlay > * { pointer-events: auto; }
+
+    #top-right { position: absolute; top: 25px; right: 30px; color: #ccc; font-size: 18px; letter-spacing: 0.02em; }
+    #top-left  { position: absolute; top: 25px; left: 30px;  color: #aaa; font-size: 14px;
+                 display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    #top-left button.ghost {
+      background: rgba(80,80,90,0.35); color: rgba(255,255,255,0.65); border: none;
+      min-width: 44px; height: 36px; padding: 0 12px; border-radius: 18px;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    #top-left button.ghost:hover { background: rgba(80,80,90,0.95); color: #fff; }
+
+    select#routineSelect, select#dotColor {
+      background: rgba(40,40,52,0.95); color: #e8e8ee;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 14px; padding: 8px 12px; border-radius: 8px;
+      min-height: 36px; cursor: pointer;
+    }
+
+    #left-sliders {
+      position: absolute; bottom: 50px; left: 50px;
+      display: flex; flex-direction: column; gap: 30px;
+      opacity: 0.17; transition: opacity 0.22s ease;
+      padding: 12px 16px 16px 16px; margin: -12px 0 0 -16px; border-radius: 14px;
+    }
+    #left-sliders:hover, #left-sliders:focus-within { opacity: 1; }
+    label { color: #ccc; font-size: 16px; display: block; margin-bottom: 6px; }
+    input[type="range"] { -webkit-appearance: none; height: 8px; width: 240px; background: #2a2a3a; border-radius: 5px; outline: none; }
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: linear-gradient(to right, #4a9eff var(--value-percent), #2a2a3a var(--value-percent));
+      border-radius: 5px; height: 8px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 20px; height: 20px; background: #4a9eff; border-radius: 50%; cursor: pointer;
+      box-shadow: 0 0 10px rgba(74, 158, 255, 0.45); margin-top: -6px;
+    }
+    input[type="range"]::-moz-range-track  { background: #2a2a3a; border-radius: 5px; height: 8px; }
+    input[type="range"]::-moz-range-thumb  { width: 20px; height: 20px; background: #4a9eff; border-radius: 50%; cursor: pointer;
+                                              box-shadow: 0 0 10px rgba(74, 158, 255, 0.45); }
+
+    #bottom-arrows { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); display: flex; gap: 80px; }
+    #bottom-arrows button {
+      background: rgba(80,80,90,0.35); color: rgba(255,255,255,0.65); border: none;
+      font-size: 26px; width: 55px; height: 55px; border-radius: 50%; cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.15s;
+    }
+    #bottom-arrows button:hover { background: rgba(80,80,90,0.95); color: #fff; transform: scale(1.08); }
+
+    #vr-hint {
+      position: absolute; bottom: 14px; right: 18px; color: rgba(255,255,255,0.4);
+      font-size: 12px; max-width: 320px; text-align: right; line-height: 1.4;
+    }
+    body.in-vr #overlay { display: none; }
+
+    @media (max-width: 520px) {
+      #top-left, #top-right, #vr-hint { display: none !important; }
+      #left-sliders {
+        bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 72px);
+        left: max(12px, env(safe-area-inset-left, 0px));
+        right: max(12px, env(safe-area-inset-right, 0px));
+        gap: 12px; padding: 8px 0 10px; margin: 0;
+      }
+      #left-sliders input[type="range"] { width: 100%; }
+      #bottom-arrows {
+        bottom: max(12px, env(safe-area-inset-bottom, 0px));
+        gap: min(22vw, 72px);
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- =================== VR / 3D SCENE =================== -->
+<a-scene
+  background="color: #08080c"
+  vr-mode-ui="enabled: true"
+  renderer="antialias: true; colorManagement: false; alpha: false"
+  device-orientation-permission-ui="enabled: false"
+  trainer>
+
+  <a-entity light="type: ambient; color: #555; intensity: 0.45"></a-entity>
+  <a-entity light="type: directional; color: #fff; intensity: 0.35" position="0 4 1"></a-entity>
+
+  <!-- Rig at floor level. The camera entity carries the desktop fallback eye height (1.6 m).
+       In VR the headset pose REPLACES the camera local transform, so eye height stays correct. -->
+  <a-entity id="rig" position="0 0 0">
+    <a-entity id="cam" camera position="0 1.6 0"
+              look-controls="touchEnabled: false; magicWindowTrackingEnabled: false; pointerLockEnabled: false">
+      <!-- Desktop mouse cursor for clicking in-world buttons. Throttled so it doesn't raycast every frame. -->
+      <a-entity cursor="rayOrigin: mouse; fuse: false"
+                raycaster="objects: .ui-btn; far: 25; interval: 16"
+                visible="false"></a-entity>
+    </a-entity>
+
+    <a-entity id="leftHand"  laser-controls="hand: left"
+              raycaster="objects: .ui-btn; far: 25; interval: 0; lineColor: #4a9eff; lineOpacity: 0.75"
+              vr-input="hand: left"></a-entity>
+    <a-entity id="rightHand" laser-controls="hand: right"
+              raycaster="objects: .ui-btn; far: 25; interval: 0; lineColor: #4a9eff; lineOpacity: 0.75"
+              vr-input="hand: right"></a-entity>
+  </a-entity>
+
+  <!-- Training "world" — everything you see (target + panel) lives in here so we can move/rotate
+       the entire scene to wherever the user is looking on Recenter. Default puts it 2 m in front
+       of the desktop camera (eye level, on the world axis). -->
+  <a-entity id="world" position="0 1.6 -2" rotation="0 0 0">
+
+    <!-- 3D bullseye: outer sphere + inner sphere offset in local +Z (no per-frame lookAt — safer in WebXR stereo). -->
+    <a-entity id="ball" scale="0.14 0.14 0.14" position="0 0 0">
+      <a-sphere class="ball-outer" radius="0.5"
+                segments-width="24" segments-height="16"
+                material="shader: flat; color: #e42e3a; transparent: false; side: double"></a-sphere>
+      <a-sphere class="ball-inner" radius="0.22" position="0 0 0.32"
+                material="shader: flat; color: #ffffff; transparent: false; side: double; depthTest: true; depthWrite: true"></a-sphere>
+    </a-entity>
+
+    <!-- Container for multi-target saccade routines (populated dynamically). -->
+    <a-entity id="multi-balls"></a-entity>
+
+    <!-- Control panel lives in world space (NOT on the camera). Placed well below the ball so you
+         look down to use it; it does not follow your head. -->
+    <a-entity id="vr-panel" position="0 -1.55 0.55" rotation="-52 0 0" scale="0.58 0.58 0.58">
+      <a-plane id="vr-panel-border" width="1.96" height="1.14" color="#2c3650" position="0 0 -0.002"
+               material="shader: flat; transparent: false; side: double"></a-plane>
+      <a-plane id="vr-panel-bg" width="1.90" height="1.10" color="#12141c"
+               material="shader: flat; transparent: false; side: double"></a-plane>
+      <a-plane width="0.014" height="1.04" position="0.70 0 -0.001" color="#3a4458"
+               material="shader: flat; side: double" data-no-raycast></a-plane>
+
+      <a-plane class="ui-btn" data-action="prev" width="0.20" height="0.10" position="-0.54 0.48 0.012" color="#2a3044" material="shader: flat; side: double"></a-plane>
+      <a-text  value="Prev" align="center" position="-0.54 0.48 0.013" color="#e8ecf4" width="0.9" side="double"></a-text>
+      <a-text id="vrRoutineLabel" value="Circle"
+              align="center" anchor="center" position="0 0.48 0.003" color="#f4f6fc" width="1.35" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="next" width="0.20" height="0.10" position="0.54 0.48 0.012" color="#2a3044" material="shader: flat; side: double"></a-plane>
+      <a-text  value="Next" align="center" position="0.54 0.48 0.013" color="#e8ecf4" width="0.9" side="double"></a-text>
+
+      <a-text id="vrInfoLabel" value="Speed 2.0          ·          0:00"
+              align="center" position="0 0.36 0.001" color="#9aa0aa" width="1.9" side="double"></a-text>
+
+      <a-text value="Speed"   align="left"  position="-0.85 0.18 0.001" color="#cccccc" width="1.05" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="speed-" width="0.13" height="0.10" position="-0.32 0.18 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="-" align="center" position="-0.32 0.18 0.002" color="#fff" width="1.6" side="double"></a-text>
+      <a-text  id="vrSpeedVal" value="2.0" align="center" position="-0.07 0.18 0.001" color="#fff" width="1.05" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="speed+" width="0.13" height="0.10" position=" 0.18 0.18 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="+" align="center" position=" 0.18 0.18 0.002" color="#fff" width="1.6" side="double"></a-text>
+
+      <a-text value="Size"    align="left"  position="-0.85 0.06 0.001" color="#cccccc" width="1.05" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="size-" width="0.13" height="0.10" position="-0.32 0.06 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="-" align="center" position="-0.32 0.06 0.002" color="#fff" width="1.6" side="double"></a-text>
+      <a-text  id="vrSizeVal" value="24" align="center" position="-0.07 0.06 0.001" color="#fff" width="1.05" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="size+" width="0.13" height="0.10" position=" 0.18 0.06 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="+" align="center" position=" 0.18 0.06 0.002" color="#fff" width="1.6" side="double"></a-text>
+
+      <a-text value="Range"   align="left"  position="-0.85 -0.06 0.001" color="#cccccc" width="1.05" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="range-" width="0.13" height="0.10" position="-0.32 -0.06 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="-" align="center" position="-0.32 -0.06 0.002" color="#fff" width="1.6" side="double"></a-text>
+      <a-text  id="vrRangeVal" value="100%" align="center" position="-0.07 -0.06 0.001" color="#fff" width="1.05" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="range+" width="0.13" height="0.10" position=" 0.18 -0.06 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="+" align="center" position=" 0.18 -0.06 0.002" color="#fff" width="1.6" side="double"></a-text>
+
+      <a-text value="Color"   align="left"  position="-0.85 -0.20 0.001" color="#cccccc" width="1.05" side="double"></a-text>
+      <a-plane id="vrColorActive" width="0.115" height="0.115" position="-0.34 -0.20 0.0005" color="#ffffff" material="shader: flat; side: double" data-no-raycast></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch" data-action="color" data-value="red"       width="0.11" height="0.11" position="-0.34 -0.20 0.012" color="#e42e3a" material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch" data-action="color" data-value="royalBlue" width="0.11" height="0.11" position="-0.21 -0.20 0.012" color="#3a68e0" material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch" data-action="color" data-value="deepGreen" width="0.11" height="0.11" position="-0.08 -0.20 0.012" color="#1f8f5c" material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch" data-action="color" data-value="cyan"      width="0.11" height="0.11" position=" 0.05 -0.20 0.012" color="#38bdd4" material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch" data-action="color" data-value="white"     width="0.11" height="0.11" position=" 0.18 -0.20 0.012" color="#f8f8fc" material="shader: flat; side: double"></a-plane>
+
+      <a-text value="Eyes"    align="left"  position="-0.85 -0.32 0.001" color="#cccccc" width="1.05" side="double"></a-text>
+      <a-plane id="vrEyeActive" width="0.215" height="0.115" position="-0.32 -0.32 0.0005" color="#ffffff" material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn" data-action="eye" data-value="both"  width="0.20" height="0.10" position="-0.32 -0.32 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="Both" align="center" position="-0.32 -0.32 0.002" color="#fff" width="1.0" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="eye" data-value="left"  width="0.20" height="0.10" position="-0.07 -0.32 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="Left" align="center" position="-0.07 -0.32 0.002" color="#fff" width="1.0" side="double"></a-text>
+      <a-plane class="ui-btn" data-action="eye" data-value="right" width="0.20" height="0.10" position=" 0.18 -0.32 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="Right" align="center" position=" 0.18 -0.32 0.002" color="#fff" width="1.0" side="double"></a-text>
+
+      <a-plane class="ui-btn" data-action="pause"    width="0.34" height="0.13" position="-0.65 -0.55 0.001" color="#23293a" material="shader: flat; side: double"></a-plane>
+      <a-text  id="vrPauseLabel" value="Pause" align="center" position="-0.65 -0.55 0.002" color="#fff" width="1.0" side="double"></a-text>
+
+      <a-plane class="ui-btn" data-action="recenter" width="0.36" height="0.13" position=" 0.22 -0.55 0.001" color="#1c3a4a" material="shader: flat; side: double"></a-plane>
+      <a-text  value="Recenter" align="center" position=" 0.22 -0.55 0.002" color="#fff" width="1.05" side="double"></a-text>
+
+      <a-text id="vr-signature" value="Bareq Aljuboori" align="right" anchor="right"
+              position="0.86 -0.38 0.004" color="#d4af37" width="1.5" side="double" data-no-raycast></a-text>
+
+      <a-text value="BG" align="right" anchor="right" position="0.74 0.18 0.001" color="#cccccc" width="1.05" side="double"></a-text>
+      <a-plane id="vrBgActive" width="0.078" height="0.078" position="0.795 0.08 0.0005" color="#ffffff"
+               material="shader: flat; side: double" data-no-raycast></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch ui-btn-bg-swatch" data-action="bg" data-value="black"
+               width="0.072" height="0.072" position="0.795 0.28 0.012" color="#08080c"
+               material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch ui-btn-bg-swatch" data-action="bg" data-value="white"
+               width="0.072" height="0.072" position="0.885 0.28 0.012" color="#f4f5f8"
+               material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch ui-btn-bg-swatch" data-action="bg" data-value="royalBlue"
+               width="0.072" height="0.072" position="0.795 0.18 0.012" color="#1e3270"
+               material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch ui-btn-bg-swatch" data-action="bg" data-value="peach"
+               width="0.072" height="0.072" position="0.885 0.18 0.012" color="#f0d4bc"
+               material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch ui-btn-bg-swatch" data-action="bg" data-value="red"
+               width="0.072" height="0.072" position="0.795 0.08 0.012" color="#8b2438"
+               material="shader: flat; side: double"></a-plane>
+      <a-plane class="ui-btn ui-btn-swatch ui-btn-bg-swatch" data-action="bg" data-value="green"
+               width="0.072" height="0.072" position="0.885 0.08 0.012" color="#1f8f5c"
+               material="shader: flat; side: double"></a-plane>
+    </a-entity>
+
+  </a-entity>
+</a-scene>
+
+<!-- =================== HTML OVERLAY (desktop / non-VR) =================== -->
+<div id="overlay">
+  <div id="top-left">
+    <button type="button" class="ghost" id="enterVrBtn" title="Enter VR">⌐ Enter VR</button>
+    <button type="button" class="ghost" id="pauseBtn">Pause</button>
+    <button type="button" class="ghost" id="recenterBtn" title="Recenter scene in front of you">Recenter</button>
+    <span>Session <span id="sessionDisplay">0:00</span></span>
+    <span>Color
+      <select id="dotColor" aria-label="Dot colors">
+        <option value="red" selected>Red / white</option>
+        <option value="royalBlue">Royal blue / white</option>
+        <option value="deepGreen">Deep green / white</option>
+        <option value="cyan">Cyan / white</option>
+        <option value="white">White / dark</option>
+      </select>
+    </span>
+    <span>Eyes
+      <select id="eyeMode" aria-label="Which eye is on">
+        <option value="both" selected>Both eyes</option>
+        <option value="left">Left only (right blocked)</option>
+        <option value="right">Right only (left blocked)</option>
+      </select>
+    </span>
+    <span>Routine
+      <select id="routineSelect" aria-label="Choose routine"></select>
+    </span>
+  </div>
+
+  <div id="top-right">
+    <span id="routineName">Circle</span> · Speed <span id="speedDisplay">2.0</span> · Range <span id="rangeDisplay">100</span>%
+  </div>
+
+  <div id="left-sliders">
+    <div><label for="speed">Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0"></div>
+    <div><label for="size">Size</label><input type="range" id="size" min="12" max="80" step="1" value="24"></div>
+    <div><label for="pathRange">Path range</label><input type="range" id="pathRange" min="35" max="100" step="1" value="100"></div>
+  </div>
+
+  <div id="bottom-arrows">
+    <button type="button" id="prev" aria-label="Previous routine">←</button>
+    <button type="button" id="next" aria-label="Next routine">→</button>
+  </div>
+
+  <div id="vr-hint">
+    <strong>VR controls:</strong> Trigger = select menu · Right A = next · Left X = pause · B/Y = recenter · Thumbstick click or Menu = hide/show panel · Thumbstick ↑/↓ = speed · Prev/Next on panel = change routine
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+   Shared state
+------------------------------------------------------------------ */
+const palettes = {
+  red:       { outer: [228, 42, 52],   inner: [255, 252, 250] },
+  royalBlue: { outer: [48, 88, 210],   inner: [255, 255, 255] },
+  deepGreen: { outer: [22, 118, 72],   inner: [255, 255, 255] },
+  cyan:      { outer: [48, 188, 212],  inner: [255, 255, 255] },
+  white:     { outer: [248, 248, 252], inner: [22, 22, 30] }
+};
+
+const state = {
+  current: 0,
+  speed: 2.0,
+  dotSize: 24,            // original "px" units for the slider; converted to meters when sized
+  rangeScale: 1.0,
+  bgMode: 'black',
+  paused: false,
+  paletteKey: 'red',
+  time: 0,
+  sessionSec: 0,
+  px: 0, py: 0, pz: 0,    // single-ball local position (relative to #world)
+  zigzagY: 0, zigzagDir: 1, zigzagProgress: 0,
+  vzigzagX: 0, vzigzagDir: 1, vzigzagProgress: 0,
+  r2TargetX: 0, r2TargetY: 0, r2TargetZ: 0,
+  lastRandomJump: 0, lastR2Change: 0,
+  hBalls: [], hCurrent: 0, hDirection: 1,
+  vBalls: [], vCurrent: 0, vDirection: 1,
+  depthProgress: 0,
+  saccade3dIdx: 0,
+  saccade3dT: 0,
+  saccade3dPoints: [],
+  eyeMode: 'both'   // 'both' | 'left' | 'right' — which eye sees the scene
+};
+
+/* For Depth Pulse: closest approach in front of the camera (meters). Close, not nose-touching. */
+const NEAR_NOSE_DIST = 0.26;
+
+const routines = [
+  'Circle', 'Counter Circle', 'Horizontal', 'Vertical',
+  'Diagonal TL-BR', 'Diagonal TR-BL',
+  'Figure 8 Horizontal', 'Figure 8 Vertical',
+  'Random', 'Random 2', 'Zigzag', 'Vertical Zigzag',
+  'Horizontal Saccades', 'Vertical Saccades',
+  'Depth Pulse',
+  '3D Random Snap', '3D Random 2',
+  'In and Outs (test)'
+];
+
+function routineClamps3DVolume(name) {
+  return name === '3D Random Snap' || name === '3D Random 2';
+}
+
+function routineIsMultiSaccade(name) {
+  return name === 'Horizontal Saccades' || name === 'Vertical Saccades';
+}
+
+function isPremium3DSaccade(name) {
+  return name === 'In and Outs (test)';
+}
+
+function smoothStep01(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+}
+
+/* Premium 3D saccades: one ball, smooth jumps between depth fixations (vergence-style). */
+function buildPremium3DHorizontalSaccades(halfW, halfH, range) {
+  const xLim = Math.min(halfW * range * 0.62, SCREEN.w * 0.45 * range);
+  const yLim = Math.min(halfH * range * 0.4, verticalRoutineAmp(halfH, range) * 0.82);
+  const { far, near } = depthZLimits(range);
+  const farZ = -far * 0.88;
+  const nearZ = near;
+  return [
+    { x: -xLim, y: 0.02, z: farZ },
+    { x: -xLim * 0.48, y: -yLim * 0.42, z: nearZ },
+    { x: xLim * 0.44, y: yLim * 0.32, z: farZ * 0.78 },
+    { x: xLim, y: 0, z: nearZ },
+    { x: 0, y: -yLim * 0.5, z: farZ },
+    { x: 0, y: yLim * 0.38, z: nearZ }
+  ];
+}
+
+function updatePremium3DSaccade(dt, s) {
+  const pts = state.saccade3dPoints;
+  if (!pts || pts.length < 2) return;
+  const effS = s * IN_AND_OUTS_SPEED_SCALE;
+  const moveDur = 0.62 / effS;
+  const holdDur = 0.34 / effS;
+  const segLen = moveDur + holdDur;
+  state.saccade3dT += dt;
+  while (state.saccade3dT >= segLen) {
+    state.saccade3dT -= segLen;
+    state.saccade3dIdx = (state.saccade3dIdx + 1) % pts.length;
+  }
+  const i = state.saccade3dIdx;
+  const j = (i + 1) % pts.length;
+  const a = pts[i];
+  const b = pts[j];
+  if (state.saccade3dT < moveDur) {
+    const t = smoothStep01(state.saccade3dT / moveDur);
+    state.px = a.x + (b.x - a.x) * t;
+    state.py = a.y + (b.y - a.y) * t;
+    state.pz = a.z + (b.z - a.z) * t;
+  } else {
+    state.px = b.x;
+    state.py = b.y;
+    state.pz = b.z;
+  }
+}
+
+function depthZLimits(range) {
+  return {
+    far: DEPTH_AMP * range,
+    near: DEPTH_NEAR_MAX * range
+  };
+}
+
+function randomDepthZ(range) {
+  const { far, near } = depthZLimits(range);
+  return -far + Math.random() * (far + near);
+}
+
+function routineUsesCameraDepth(name) {
+  return isPremium3DSaccade(name) || name === '3D Random Snap' || name === '3D Random 2';
+}
+
+/** Map screen-plane pz to 0 (far) .. 1 (near) for camera-ray placement. */
+function depthTFromPz(pz, range) {
+  const { far, near } = depthZLimits(range);
+  return Math.max(0, Math.min(1, (pz + far) / (far + near)));
+}
+
+/* Same near feel as Depth Pulse: slide along camera → screen ray per (x,y). */
+function applyCameraDepthBallPosition(ball, px, py, pz, range, opts = {}) {
+  const sceneEl = document.querySelector('a-scene');
+  const cam = sceneEl && sceneEl.camera;
+  const world = document.querySelector('#world');
+  if (!cam || !world) {
+    ball.object3D.position.set(px, py + BALL_Y_OFFSET, pz);
+    return;
+  }
+
+  let t = depthTFromPz(pz, range);
+  if (opts.pullNear) {
+    const nearCap = DEPTH_NEAR_MAX * range;
+    if (pz > 0) t = Math.max(t, 0.7 + 0.3 * Math.min(1, pz / Math.max(nearCap, 0.01)));
+    t = Math.min(1, t + 0.1);
+  }
+  const nearDist = opts.pullNear ? NEAR_NOSE_DIST * 0.88 : NEAR_NOSE_DIST;
+  const planeLocal = new THREE.Vector3(px, py + BALL_Y_OFFSET, 0);
+  const planeWorld = planeLocal.clone();
+  world.object3D.localToWorld(planeWorld);
+  cam.getWorldPosition(_depthCamPos);
+  _depthDir.subVectors(planeWorld, _depthCamPos);
+  const planeDist = _depthDir.length();
+  if (planeDist < nearDist + 0.02) {
+    ball.object3D.position.set(px, py + BALL_Y_OFFSET, pz);
+    return;
+  }
+  _depthDir.divideScalar(planeDist);
+  const farDist = planeDist + DEPTH_PULSE_FAR_EXTRA * range;
+  const targetDist = (1 - t) * farDist + t * nearDist;
+  _depthBallWorld.copy(_depthCamPos).addScaledVector(_depthDir, targetDist);
+  world.object3D.worldToLocal(_depthBallWorld);
+  ball.object3D.position.copy(_depthBallWorld);
+}
+
+function clamp3DPosition(halfW, halfH, range) {
+  const xLim = halfW * range;
+  const yPad = Math.abs(BALL_Y_OFFSET);
+  const yLo = -halfH * range + yPad;
+  const yHi = halfH * range + yPad;
+  state.px = Math.max(-xLim, Math.min(xLim, state.px));
+  state.py = Math.max(yLo, Math.min(yHi, state.py));
+  const { far, near } = depthZLimits(range);
+  state.pz = Math.max(-far, Math.min(near, state.pz));
+}
+
+/* The training "screen" is now a child of #world. Local origin = screen center.
+   Width/height kept moderate so the whole motion stays comfortably inside central vision
+   (about ±22°/±15° at 2 m; well inside the headset's clear sweet spot). */
+const SCREEN = { w: 1.8, h: 1.2 };
+
+/* Shift all routine targets slightly below eye level (world local Y). */
+const BALL_Y_OFFSET = -0.16;
+
+/* Official saccade sweep speed (lower = slower). */
+const SACCADE_TRAVEL_RATE = 1.52;
+const VERTICAL_SACCADE_TRAVEL_RATE = 1.32;
+/* At app default speed 2.0, move as if speed were 1.5 (slider unchanged). */
+const SPEED_AS_IF_15_AT_DEFAULT_2 = 1.5 / 2.0;
+
+/* Zigzag: smooth Lissajous; full screen span like Horizontal / Vertical. */
+const ZIGZAG_RATE = 0.7;
+const VERTICAL_ZIGZAG_RATE = 0.38;
+const ZIGZAG_WAVES = 6;
+const VERTICAL_ZIGZAG_WAVES = 7;
+
+/* At default speed 2.0, In and Outs feels like 1.5 (slider unchanged). */
+const IN_AND_OUTS_SPEED_SCALE = 1.5 / 2.0;
+
+const SCENE_BG = {
+  black: '#08080c',
+  white: '#e8eaee',
+  royalBlue: '#141e42',
+  peach: '#f2dcc8',
+  red: '#140a0c',
+  green: '#0a1610'
+};
+
+const PANEL_BG_SWATCH = {
+  black: '#08080c',
+  white: '#f4f5f8',
+  royalBlue: '#1e3270',
+  peach: '#f0d4bc',
+  red: '#8b2438',
+  green: '#1f8f5c'
+};
+
+const BG_DARK_KEYS = { black: true, royalBlue: true, red: true, green: true };
+
+/* Extra downward dip for official Vertical (toward panel) without overshooting the screen. */
+const VERTICAL_DOWN_DIP = 0.42;
+const VERTICAL_DOWN_MAX = 1.02;
+const VERTICAL_TIME_RATE = 2.2;
+
+function verticalRoutineAmp(halfH, range) {
+  return Math.min(halfH * range + VERTICAL_DOWN_DIP * range, VERTICAL_DOWN_MAX * range);
+}
+
+const PANEL_SWATCH_HEX = {
+  red: '#e42e3a', royalBlue: '#3a68e0', deepGreen: '#1f8f5c', cyan: '#38bdd4', white: '#f8f8fc'
+};
+
+const PALETTE_OUTER_GLOW = {
+  red:       { emissive: '#6e1018', intensity: 0.11 },
+  royalBlue: { emissive: '#142858', intensity: 0.17 },
+  deepGreen: { emissive: '#0c3824', intensity: 0.16 },
+  cyan:      { emissive: '#0c4858', intensity: 0.14 },
+  white:     { emissive: '#888899', intensity: 0.08 }
+};
+
+const VR_NAV_PREV_X = -0.54;
+const VR_NAV_NEXT_X = 0.54;
+const VR_NAV_TITLE_X = 0;
+
+const SPEED_STEP = 0.1;
+const RANGE_MIN_PCT = 35;
+const RANGE_MAX_PCT = 100;
+
+/* For depth routines, +z (in world-local) points TOWARD the user; -z points away.
+   DEPTH_AMP = how far the ball can go away; DEPTH_NEAR_MAX = closest toward the user. */
+const DEPTH_AMP = 1.9;
+const DEPTH_NEAR_MAX = 0.58;
+/* Depth Pulse: push the “far” end beyond the screen plane (meters along view axis, scaled by range). */
+const DEPTH_PULSE_FAR_EXTRA = 0.55;
+
+/* Premium bullseye (official). Set false only to restore flat look. */
+const USE_PREMIUM_BALL = true;
+
+/* Premium VR panel (test). Set false to restore flat panel. */
+const USE_PREMIUM_PANEL_TEST = true;
+function ballSegmentAttrs() {
+  return USE_PREMIUM_BALL
+    ? 'segments-width: 48; segments-height: 32'
+    : 'segments-width: 24; segments-height: 16';
+}
+
+function ballOuterMaterialAttr(outerHex, paletteKey) {
+  if (!USE_PREMIUM_BALL) {
+    return `shader: flat; color: ${outerHex}; transparent: false; side: double`;
+  }
+  const glowSpec = PALETTE_OUTER_GLOW[paletteKey] || { emissive: outerHex, intensity: 0.14 };
+  const emissive = glowSpec.emissive;
+  const glow = glowSpec.intensity;
+  return [
+    'shader: standard',
+    `color: ${outerHex}`,
+    `emissive: ${emissive}`,
+    `emissiveIntensity: ${glow}`,
+    'metalness: 0.35',
+    'roughness: 0.24',
+    'side: double'
+  ].join('; ');
+}
+
+function ballInnerMaterialAttr(innerHex) {
+  if (!USE_PREMIUM_BALL) {
+    return `shader: flat; color: ${innerHex}; transparent: false; side: double; depthTest: true; depthWrite: true`;
+  }
+  return [
+    'shader: standard',
+    `color: ${innerHex}`,
+    `emissive: ${innerHex}`,
+    'emissiveIntensity: 0.06',
+    'metalness: 0.12',
+    'roughness: 0.16',
+    'side: double',
+    'depthTest: true',
+    'depthWrite: true'
+  ].join('; ');
+}
+
+function panelBtnMaterialAttr(hex) {
+  if (!USE_PREMIUM_PANEL_TEST) {
+    return `shader: flat; color: ${hex}; side: double`;
+  }
+  return [
+    'shader: standard',
+    `color: ${hex}`,
+    `emissive: ${hex}`,
+    'emissiveIntensity: 0.1',
+    'metalness: 0.38',
+    'roughness: 0.3',
+    'side: double'
+  ].join('; ');
+}
+
+function applyPremiumPanelVisuals() {
+  if (!USE_PREMIUM_PANEL_TEST) return;
+  const border = document.getElementById('vr-panel-border');
+  const bg = document.getElementById('vr-panel-bg');
+  if (border) {
+    border.setAttribute('material', 'shader: standard; color: #2c3650; emissive: #3a4a68; emissiveIntensity: 0.12; metalness: 0.45; roughness: 0.35; side: double');
+  }
+  if (bg) {
+    bg.setAttribute('material', 'shader: standard; color: #12141c; emissive: #1a2234; emissiveIntensity: 0.18; metalness: 0.25; roughness: 0.42; side: double');
+  }
+  document.querySelectorAll('#vr-panel .ui-btn').forEach(btn => {
+    const action = btn.dataset.action;
+    if (action === 'bg') {
+      const key = btn.dataset.value || 'black';
+      const hex = PANEL_BG_SWATCH[key] || PANEL_BG_SWATCH.black;
+      const dark = !!BG_DARK_KEYS[key];
+      btn.setAttribute('material', `shader: flat; color: ${hex}; emissive: ${hex}; emissiveIntensity: ${dark ? 0.38 : 0.14}; side: double`);
+      return;
+    }
+    if (action === 'color') {
+      const hex = PANEL_SWATCH_HEX[btn.dataset.value] || PANEL_SWATCH_HEX.red;
+      btn.setAttribute('material', `shader: flat; color: ${hex}; emissive: ${hex}; emissiveIntensity: 0.45; side: double`);
+      return;
+    }
+    const hex = (action === 'recenter') ? '#1e4a62' : '#2a3044';
+    btn.setAttribute('material', panelBtnMaterialAttr(hex));
+  });
+  const hi = document.getElementById('vrColorActive');
+  const eyeHi = document.getElementById('vrEyeActive');
+  if (hi) hi.setAttribute('material', 'shader: standard; color: #f8f8fc; emissive: #ffffff; emissiveIntensity: 0.2; metalness: 0.2; roughness: 0.2; side: double');
+  if (eyeHi) eyeHi.setAttribute('material', 'shader: standard; color: #f8f8fc; emissive: #ffffff; emissiveIntensity: 0.2; metalness: 0.2; roughness: 0.2; side: double');
+  const bgHi = document.getElementById('vrBgActive');
+  if (bgHi) bgHi.setAttribute('material', 'shader: standard; color: #f8f8fc; emissive: #ffffff; emissiveIntensity: 0.25; metalness: 0.15; roughness: 0.2; side: double');
+  bindVrPanelUi();
+}
+
+function applyBallVisuals() {
+  if (!USE_PREMIUM_BALL) return;
+  document.querySelectorAll('.ball-outer, .ball-inner').forEach(el => {
+    const segs = ballSegmentAttrs().split('; ');
+    segs.forEach(pair => {
+      const i = pair.indexOf(':');
+      if (i > 0) el.setAttribute(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
+    });
+    const isOuter = el.classList.contains('ball-outer');
+    const pal = palettes[state.paletteKey] || palettes.red;
+    const hex = colorToHex(isOuter ? pal.outer : pal.inner);
+    el.setAttribute('material', isOuter ? ballOuterMaterialAttr(hex, state.paletteKey) : ballInnerMaterialAttr(hex));
+  });
+}
+
+/* Pixel-size slider (12..80) → ball half-width in meters at the screen plane. */
+function ballRadiusMeters() {
+  const t = (state.dotSize - 12) / (80 - 12);
+  return 0.025 + t * (0.13 - 0.025);
+}
+
+/* ------------------------------------------------------------------
+   Palette → live material colors
+------------------------------------------------------------------ */
+function colorToHex(rgb) {
+  return '#' + rgb.map(c => Math.max(0, Math.min(255, c | 0)).toString(16).padStart(2, '0')).join('');
+}
+
+function findUiActionDataset(target) {
+  let node = target;
+  while (node) {
+    if (node.dataset && node.dataset.action) return node.dataset;
+    node = node.parentEl || null;
+  }
+  return null;
+}
+
+let _lastUiTap = 0;
+
+function activateUiFromTarget(target) {
+  const ds = findUiActionDataset(target);
+  if (!ds || !ds.action) return;
+  const now = performance.now();
+  if (now - _lastUiTap < 100) return;
+  _lastUiTap = now;
+  handleUiAction(ds);
+}
+
+function handleUiAction(ds) {
+  if (!ds || !ds.action) return;
+  const a = ds.action;
+  if      (a === 'next')     goNext();
+  else if (a === 'prev')     goPrev();
+  else if (a === 'pause')    togglePause();
+  else if (a === 'speed+')   setSpeed(state.speed + SPEED_STEP);
+  else if (a === 'speed-')   setSpeed(state.speed - SPEED_STEP);
+  else if (a === 'size+')    setSize(state.dotSize + 4);
+  else if (a === 'size-')    setSize(state.dotSize - 4);
+  else if (a === 'range+')   setRange(state.rangeScale * 100 + 1);
+  else if (a === 'range-')   setRange(state.rangeScale * 100 - 1);
+  else if (a === 'color')    setPalette(ds.value || 'red');
+  else if (a === 'bg')       setSceneBackground(ds.value || 'black');
+  else if (a === 'eye')      setEyeMode(ds.value || 'both');
+  else if (a === 'recenter') recenterWorld();
+}
+
+function syncVrRaycasterLayers() {
+  document.querySelectorAll('[raycaster]').forEach(el => {
+    const rc = el.components && el.components.raycaster;
+    if (!rc || !rc.raycaster || !rc.raycaster.layers) return;
+    rc.raycaster.layers.enable(0);
+    rc.raycaster.layers.enable(1);
+    rc.raycaster.layers.enable(2);
+  });
+}
+
+let _hoveredUiBtn = null;
+
+function parseAframePos(val) {
+  if (val && typeof val === 'object' && val.x !== undefined) return val;
+  const p = String(val || '0 0 0').trim().split(/\s+/).map(Number);
+  return { x: p[0] || 0, y: p[1] || 0, z: p[2] || 0 };
+}
+
+function ensureUiBtnOutline(btn) {
+  if (btn._outlineEl) return btn._outlineEl;
+  const pos = parseAframePos(btn.getAttribute('position'));
+  const w = parseFloat(btn.getAttribute('width')) || 0.2;
+  const h = parseFloat(btn.getAttribute('height')) || 0.1;
+  const outline = document.createElement('a-plane');
+  outline.setAttribute('class', 'ui-btn-outline');
+  outline.setAttribute('width', String(w * 1.14));
+  outline.setAttribute('height', String(h * 1.14));
+  outline.setAttribute('position', `${pos.x} ${pos.y} ${pos.z - 0.002}`);
+  outline.setAttribute('material', 'shader: flat; color: #ffffff; side: double');
+  outline.object3D.visible = false;
+  btn.parentNode.insertBefore(outline, btn);
+  btn._outlineEl = outline;
+  return outline;
+}
+
+function setUiBtnHovered(btn, on) {
+  if (!btn || !btn.classList.contains('ui-btn')) return;
+  if (on) {
+    if (_hoveredUiBtn && _hoveredUiBtn !== btn) setUiBtnHovered(_hoveredUiBtn, false);
+    _hoveredUiBtn = btn;
+    ensureUiBtnOutline(btn);
+    btn._outlineEl.object3D.visible = true;
+  } else if (_hoveredUiBtn === btn) {
+    if (btn._outlineEl) btn._outlineEl.object3D.visible = false;
+    _hoveredUiBtn = null;
+  }
+}
+
+/* VR clicks hit the button entity, not a-scene — bind directly + read raycaster on trigger. */
+function bindVrPanelUi() {
+  const panel = document.getElementById('vr-panel');
+  if (!panel) return;
+
+  panel.querySelectorAll('.ui-btn').forEach((btn) => {
+    if (btn._uiClickBound) return;
+    btn._uiClickBound = true;
+    btn.addEventListener('click', () => activateUiFromTarget(btn));
+  });
+
+  if (!panel._uiPanelBound) {
+    panel._uiPanelBound = true;
+    panel.addEventListener('click', (e) => activateUiFromTarget(e.target));
+  }
+
+  bindVrPanelHover();
+}
+
+function bindVrPanelHover() {
+  document.querySelectorAll('#vr-panel .ui-btn').forEach((btn) => {
+    if (btn._hoverBound) return;
+    btn._hoverBound = true;
+    ensureUiBtnOutline(btn);
+    const enter = () => setUiBtnHovered(btn, true);
+    const leave = () => setUiBtnHovered(btn, false);
+    btn.addEventListener('raycaster-intersected', enter);
+    btn.addEventListener('raycaster-intersection-cleared', leave);
+    btn.addEventListener('mouseenter', enter);
+    btn.addEventListener('mouseleave', leave);
+  });
+}
+
+function bindControllerTriggerUi() {
+  document.querySelectorAll('#leftHand, #rightHand').forEach((handEl) => {
+    if (handEl._triggerUiBound) return;
+    handEl._triggerUiBound = true;
+    const fireFromRay = () => {
+      const rc = handEl.components.raycaster;
+      if (!rc || !rc.intersectedEls || rc.intersectedEls.length === 0) return;
+      activateUiFromTarget(rc.intersectedEls[0]);
+    };
+    handEl.addEventListener('triggerdown', fireFromRay);
+  });
+
+  const cursor = document.querySelector('#cam [raycaster]');
+  if (cursor && !cursor._triggerUiBound) {
+    cursor._triggerUiBound = true;
+    cursor.addEventListener('click', () => {
+      const rc = cursor.components.raycaster;
+      if (!rc || !rc.intersectedEls || rc.intersectedEls.length === 0) return;
+      activateUiFromTarget(rc.intersectedEls[0]);
+    });
+  }
+}
+
+function vrRoutineTitleForPanel(name) {
+  if (name.length <= 22) return name;
+  if (name.endsWith(' (test)')) {
+    const core = name.slice(0, -7);
+    const sp = core.indexOf(' ', Math.max(8, Math.floor(core.length * 0.45)));
+    if (sp > 0) return core.slice(0, sp) + '\n' + core.slice(sp + 1) + ' (test)';
+  }
+  const sp = name.indexOf(' ', Math.max(8, Math.floor(name.length * 0.45)));
+  if (sp > 0) return name.slice(0, sp) + '\n' + name.slice(sp + 1);
+  return name;
+}
+
+function syncVrRoutineLabelLayout(routineName) {
+  if (!els.vrRoutineLabel) return;
+  const display = vrRoutineTitleForPanel(routineName);
+  const lines = display.split('\n').length;
+  const y = lines > 1 ? 0.455 : 0.48;
+  els.vrRoutineLabel.setAttribute('position', `${VR_NAV_TITLE_X} ${y} 0.003`);
+  els.vrRoutineLabel.setAttribute('align', 'center');
+  els.vrRoutineLabel.setAttribute('anchor', 'center');
+  els.vrRoutineLabel.setAttribute('value', display);
+  els.vrRoutineLabel.__last = display;
+  /* width = text size in a-text; keep a readable floor for long names */
+  let w = 1.35;
+  if (routineName.length > 26) w = 1.08;
+  else if (routineName.length > 20) w = 1.18;
+  else if (routineName.length > 15) w = 1.28;
+  els.vrRoutineLabel.setAttribute('width', String(w));
+}
+
+function applyPalette() {
+  const pal = palettes[state.paletteKey] || palettes.red;
+  const outerHex = colorToHex(pal.outer);
+  const innerHex = colorToHex(pal.inner);
+  if (USE_PREMIUM_BALL) {
+    document.querySelectorAll('.ball-outer').forEach(el => {
+      el.setAttribute('material', ballOuterMaterialAttr(outerHex, state.paletteKey));
+    });
+    document.querySelectorAll('.ball-inner').forEach(el => {
+      el.setAttribute('material', ballInnerMaterialAttr(innerHex));
+    });
+    return;
+  }
+  document.querySelectorAll('.ball-outer').forEach(el => {
+    const m = el.getObject3D('mesh');
+    if (m && m.material && m.material.color) m.material.color.set(outerHex);
+  });
+  document.querySelectorAll('.ball-inner').forEach(el => {
+    const m = el.getObject3D('mesh');
+    if (m && m.material && m.material.color) m.material.color.set(innerHex);
+  });
+}
+
+/* ------------------------------------------------------------------
+   A-Frame components
+------------------------------------------------------------------ */
+
+/* Per-controller input: right A=next, left X=pause, B/Y=recenter, thumbstick click=show/hide menu,
+   thumbstick Y=speed. Trigger/grip are used only by laser-controls to click the in-world menu.
+   The Quest "menu" button (left controller) also toggles the menu. */
+AFRAME.registerComponent('vr-input', {
+  schema: { hand: { default: 'right' } },
+  init() {
+    this.thumbY = 0;
+    const pauseBtn = this.data.hand === 'right' ? null : 'xbuttondown';
+    const nextBtn  = this.data.hand === 'right' ? 'abuttondown' : null;
+    const recenterBtn = this.data.hand === 'right' ? 'bbuttondown' : 'ybuttondown';
+    if (pauseBtn) this.el.addEventListener(pauseBtn, () => togglePause());
+    if (nextBtn)  this.el.addEventListener(nextBtn,  () => goNext());
+    this.el.addEventListener(recenterBtn, () => recenterWorld());
+
+    // Either thumbstick click or the system menu button toggles the floating panel.
+    this.el.addEventListener('thumbstickdown', () => toggleVrPanel());
+    this.el.addEventListener('menudown',       () => toggleVrPanel());
+
+    this.el.addEventListener('thumbstickmoved', (e) => { this.thumbY = e.detail.y || 0; });
+  },
+  tick(t, dt) {
+    if (Math.abs(this.thumbY) > 0.4) {
+      const delta = -this.thumbY * (dt / 1000) * 1.0;
+      setSpeed(state.speed + delta);
+    }
+  }
+});
+
+/* Top-level system: routine update + state → scene apply + HUD sync. */
+AFRAME.registerComponent('trainer', {
+  init() {
+    this.ball    = document.querySelector('#ball');
+    this.multi   = document.querySelector('#multi-balls');
+    this.world   = document.querySelector('#world');
+    this._tmpVec = new THREE.Vector3();
+    this._tmpDir = new THREE.Vector3();
+
+    this.el.addEventListener('enter-vr', () => {
+      document.body.classList.add('in-vr');
+      const w = document.getElementById('world');
+      if (!w) return;
+      // Initial safe pose. Then schedule a few delayed samples of the actual headset pose so
+      // the ball ends up at YOUR real eye height (not the 1.6 m default). We retry across a
+      // few frames because the XR camera pose isn't valid on the very first frame after enter-vr.
+      w.object3D.position.set(0, 1.6, -2);
+      w.object3D.rotation.set(0, 0, 0);
+      this._needsHeightSnap = true;
+      this._heightSnapDeadline = performance.now() + 1500;
+      // Build the per-eye blockers (camera object3D is in the scene tree by now) and apply
+      // the current eye mode immediately.
+      ensureEyeBlockers();
+      applyEyeLayers(true);
+      bindVrPanelUi();
+      bindControllerTriggerUi();
+      syncVrRaycasterLayers();
+    });
+    this.el.addEventListener('exit-vr',  () => {
+      document.body.classList.remove('in-vr');
+    });
+  },
+  tick(t, dt) {
+    const dts = Math.min(dt / 1000, 0.05);
+    if (!state.paused) {
+      updateRoutine(dts);
+      state.sessionSec += dt / 1000;
+    }
+
+    // Sample the user's real eye height a few frames after entering VR and place the ball there.
+    // Quest needs a moment after enter-vr before the XR pose becomes valid; we keep trying for
+    // up to ~1.5 s, accepting the first plausible reading (height between 0.6 m and 2.4 m).
+    if (this._needsHeightSnap) {
+      const cam = this.el.sceneEl.camera;
+      const w   = document.getElementById('world');
+      if (cam && w) {
+        const p = new THREE.Vector3();
+        cam.getWorldPosition(p);
+        if (p.y > 0.6 && p.y < 2.4) {
+          // Place the world 2 m in front of the user along the camera's horizontal forward,
+          // at the user's actual eye height.
+          const dir = new THREE.Vector3();
+          cam.getWorldDirection(dir);
+          const fwd = new THREE.Vector3(dir.x, 0, dir.z);
+          if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+          fwd.normalize();
+          w.object3D.position.set(p.x + fwd.x * 2.0, p.y, p.z + fwd.z * 2.0);
+          const yaw = Math.atan2(-fwd.x, -fwd.z);
+          w.object3D.rotation.set(0, yaw, 0);
+          this._needsHeightSnap = false;
+        } else if (performance.now() > this._heightSnapDeadline) {
+          this._needsHeightSnap = false;
+        }
+      }
+    }
+
+    applyToScene();
+    syncHud();
+  }
+});
+
+/* Per-eye occlusion using three.js's standard WebXR layer convention:
+     - cameraL (left sub-camera) renders layers 0 and 1
+     - cameraR (right sub-camera) renders layers 0 and 2
+   We attach two large black planes to the camera. The "block-left" plane is on layer 1
+   (only the left eye sees it), the "block-right" plane is on layer 2 (only the right eye
+   sees it). Toggling their .visible blacks out the chosen eye without touching scene meshes
+   at all (which was the source of the earlier breakage). */
+
+let _blockerL = null;
+let _blockerR = null;
+
+function ensureEyeBlockers() {
+  if (_blockerL && _blockerR) return;
+  const camEl = document.querySelector('#cam');
+  if (!camEl || !camEl.object3D || !camEl.object3D.parent) return;
+
+  const geom = new THREE.PlaneGeometry(8, 8);
+
+  function makeBlocker(layer) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false,
+      transparent: false
+    });
+    const m = new THREE.Mesh(geom, mat);
+    m.position.set(0, 0, -0.5);
+    m.layers.set(layer);
+    m.frustumCulled = false;
+    m.renderOrder = 99999;
+    m.visible = false;
+    return m;
+  }
+
+  // Plane on layer 1 -> visible to left eye only -> blacks out the LEFT eye when shown.
+  _blockerL = makeBlocker(1);
+  // Plane on layer 2 -> visible to right eye only -> blacks out the RIGHT eye when shown.
+  _blockerR = makeBlocker(2);
+
+  camEl.object3D.add(_blockerL);
+  camEl.object3D.add(_blockerR);
+}
+
+function applyPanelEyeLayers(mode) {
+  const panel = document.getElementById('vr-panel');
+  if (!panel || !panel.object3D) return;
+  panel.object3D.traverse((node) => {
+    if (!node.layers) return;
+    node.layers.disable(0);
+    node.layers.disable(1);
+    node.layers.disable(2);
+    if (mode === 'both') node.layers.enable(0);
+    else if (mode === 'left') node.layers.enable(1);
+    else if (mode === 'right') node.layers.enable(2);
+  });
+}
+
+function applyEyeLayers(_force) {
+  ensureEyeBlockers();
+  if (!_blockerL || !_blockerR) return;
+  // "left"  = train LEFT eye  -> black out the RIGHT eye (show right-eye blocker)
+  // "right" = train RIGHT eye -> black out the LEFT  eye (show left-eye  blocker)
+  // "both"  = nothing blocked
+  if (state.eyeMode === 'left') {
+    _blockerL.visible = false;
+    _blockerR.visible = true;
+  } else if (state.eyeMode === 'right') {
+    _blockerL.visible = true;
+    _blockerR.visible = false;
+  } else {
+    _blockerL.visible = false;
+    _blockerR.visible = false;
+  }
+  applyPanelEyeLayers(state.eyeMode);
+  syncVrRaycasterLayers();
+}
+
+/* ------------------------------------------------------------------
+   Recenter — moves the entire scene in front of the user's current pose
+------------------------------------------------------------------ */
+function recenterWorld() {
+  const sceneEl = document.querySelector('a-scene');
+  const world   = document.querySelector('#world');
+  if (!sceneEl || !world) return;
+
+  // Use the LIVE perspective camera (sceneEl.camera) for position/orientation, not the entity
+  // wrapper. In VR with a local-floor reference space, A-Frame zeros out the camera entity's
+  // wrapper Y so eye height isn't doubled; reading from the wrapper would put us at floor level
+  // and drop the whole scene below your feet (which is what made VR look pitch black).
+  const cam = sceneEl.camera;
+  if (!cam) return;
+
+  const camPos = new THREE.Vector3();
+  const camDir = new THREE.Vector3();
+  cam.getWorldPosition(camPos);
+  cam.getWorldDirection(camDir); // returns the -Z direction the camera is facing
+
+  // Forward direction projected onto the horizontal plane, normalized.
+  const fwd = new THREE.Vector3(camDir.x, 0, camDir.z);
+  if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+  fwd.normalize();
+
+  const dist = 2.0;
+  world.object3D.position.set(
+    camPos.x + fwd.x * dist,
+    camPos.y,                      // place screen at the user's actual eye height
+    camPos.z + fwd.z * dist
+  );
+
+  // Rotate #world around Y so its local +Z points back toward the user (= -fwd).
+  // Default world +Z is (0,0,1); after rotation by θ it becomes (sin θ, 0, cos θ).
+  // We want that to equal -fwd, so θ = atan2(-fwd.x, -fwd.z).
+  const yaw = Math.atan2(-fwd.x, -fwd.z);
+  world.object3D.rotation.set(0, yaw, 0);
+}
+
+/* ------------------------------------------------------------------
+   Routine math
+------------------------------------------------------------------ */
+function resetRoutine() {
+  state.time = 0;
+  state.px = 0; state.py = 0; state.pz = 0;
+  state.lastRandomJump = 0;
+  state.lastR2Change = 0;
+  state.r2TargetX = 0; state.r2TargetY = 0; state.r2TargetZ = 0;
+  state.zigzagProgress = 0; state.zigzagY = 0; state.zigzagDir = 1;
+  state.vzigzagProgress = 0; state.vzigzagX = -SCREEN.w * 0.2; state.vzigzagDir = 1;
+  state.depthProgress = 0;
+  state.hDirection = 1; state.vDirection = 1;
+  state.hBalls = []; state.vBalls = [];
+  state.saccade3dIdx = 0;
+  state.saccade3dT = 0;
+  state.saccade3dPoints = [];
+
+  const name = routines[state.current];
+  const r = ballRadiusMeters();
+  const halfW = SCREEN.w / 2 - r;
+  const halfH = SCREEN.h / 2 - r;
+
+  if (name === 'Horizontal Saccades') {
+    const xHalf = Math.min(halfW, 0.45 * SCREEN.w * state.rangeScale);
+    for (let i = 0; i < 7; i++) {
+      const startX = (i % 2 === 0) ? xHalf : -xHalf;
+      const yi = -halfH + (i / 6) * (2 * halfH);
+      state.hBalls.push({ x: startX, y: yi, dir: (i % 2 === 0) ? -1 : 1 });
+    }
+    state.hCurrent = 0;
+  } else if (name === 'Vertical Saccades') {
+    const yHalf = Math.min(halfH, 0.45 * SCREEN.h * state.rangeScale);
+    for (let i = 0; i < 9; i++) {
+      const startY = (i % 2 === 0) ? -yHalf : yHalf;
+      const xi = -halfW + (i / 8) * (2 * halfW);
+      state.vBalls.push({ x: xi, y: startY, dir: (i % 2 === 0) ? 1 : -1 });
+    }
+    state.vCurrent = 0;
+  } else if (name === 'In and Outs (test)') {
+    state.saccade3dPoints = buildPremium3DHorizontalSaccades(halfW, halfH, state.rangeScale);
+    const p0 = state.saccade3dPoints[0];
+    state.px = p0.x; state.py = p0.y; state.pz = p0.z;
+  }
+
+  rebuildMultiBalls();
+}
+
+function rebuildMultiBalls() {
+  const multi = document.querySelector('#multi-balls');
+  while (multi.firstChild) multi.removeChild(multi.firstChild);
+
+  const cur = routines[state.current];
+  if (isPremium3DSaccade(cur)) return;
+
+  const list = (cur === 'Horizontal Saccades') ? state.hBalls
+            : (cur === 'Vertical Saccades')   ? state.vBalls
+            : null;
+  if (!list) return;
+
+  const pal      = palettes[state.paletteKey] || palettes.red;
+  const outerHex = colorToHex(pal.outer);
+  const innerHex = colorToHex(pal.inner);
+  const scl      = ballRadiusMeters() * 2;
+
+  list.forEach((b, idx) => {
+    const e = document.createElement('a-entity');
+    e.object3D.scale.set(scl, scl, scl);
+    e.object3D.position.set(b.x, b.y, b.z || 0);
+    e.dataset.idx = String(idx);
+
+    const outer = document.createElement('a-sphere');
+    outer.setAttribute('class', 'ball-outer');
+    outer.setAttribute('radius', '0.5');
+    ballSegmentAttrs().split('; ').forEach(pair => {
+      const i = pair.indexOf(':');
+      if (i > 0) outer.setAttribute(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
+    });
+    outer.setAttribute('material', ballOuterMaterialAttr(outerHex, state.paletteKey));
+    e.appendChild(outer);
+
+    const inner = document.createElement('a-sphere');
+    inner.setAttribute('class', 'ball-inner');
+    inner.setAttribute('radius', '0.22');
+    inner.setAttribute('position', '0 0 0.32');
+    inner.setAttribute('material', ballInnerMaterialAttr(innerHex));
+    e.appendChild(inner);
+
+    multi.appendChild(e);
+  });
+
+  applyEyeLayers(true);
+}
+
+function updateRoutine(dt) {
+  state.time += dt * state.speed;
+  const name = routines[state.current];
+  const r = ballRadiusMeters();
+  const halfW = SCREEN.w / 2 - r;
+  const halfH = SCREEN.h / 2 - r;
+  const s = state.speed;
+  const range = state.rangeScale;
+
+  if (name === 'Circle') {
+    const rad = Math.min(halfW, halfH) * range;
+    state.px = rad * Math.cos(state.time * 2.4);
+    state.py = rad * Math.sin(state.time * 2.4);
+  }
+  else if (name === 'Counter Circle') {
+    const rad = Math.min(halfW, halfH) * range;
+    state.px = rad * Math.cos(-state.time * 2.4);
+    state.py = rad * Math.sin(-state.time * 2.4);
+  }
+  else if (name === 'Horizontal') {
+    state.px = halfW * range * Math.sin(state.time * 2.2);
+    state.py = 0;
+  }
+  else if (name === 'Vertical') {
+    const vAmp = verticalRoutineAmp(halfH, range);
+    state.px = 0;
+    state.py = vAmp * Math.sin(state.time * VERTICAL_TIME_RATE);
+  }
+  else if (name === 'Diagonal TL-BR') {
+    state.px =  halfW * range * Math.sin(state.time * 2.0);
+    state.py =  halfH * range * Math.sin(state.time * 2.0);
+  }
+  else if (name === 'Diagonal TR-BL') {
+    state.px =  halfW * range * Math.sin(state.time * 2.0);
+    state.py = -halfH * range * Math.sin(state.time * 2.0);
+  }
+  else if (name === 'Figure 8 Horizontal') {
+    state.px = halfW * range * Math.sin(state.time * 1.5);
+    state.py = halfH * range * Math.sin(2 * state.time * 1.5);
+  }
+  else if (name === 'Figure 8 Vertical') {
+    state.px = halfW * range * Math.sin(2 * state.time * 1.5);
+    state.py = halfH * range * Math.sin(state.time * 1.5);
+  }
+  else if (name === 'Zigzag') {
+    const vAmp = verticalRoutineAmp(halfH, range);
+    const t = state.time * ZIGZAG_RATE * SPEED_AS_IF_15_AT_DEFAULT_2;
+    state.py = vAmp * Math.sin(t);
+    state.px = halfW * range * Math.sin(ZIGZAG_WAVES * t);
+  }
+  else if (name === 'Vertical Zigzag') {
+    const vAmp = verticalRoutineAmp(halfH, range);
+    const t = state.time * VERTICAL_ZIGZAG_RATE;
+    state.px = halfW * range * Math.sin(t);
+    state.py = vAmp * Math.sin(VERTICAL_ZIGZAG_WAVES * t);
+  }
+  else if (name === 'Random') {
+    if (state.time - state.lastRandomJump > 1.9 / s) {
+      state.px = (Math.random() * 2 - 1) * halfW * range;
+      state.py = (Math.random() * 2 - 1) * halfH * range;
+      state.lastRandomJump = state.time;
+    }
+  }
+  else if (name === 'Random 2') {
+    if (state.time - state.lastR2Change > 2.1 / s) {
+      state.r2TargetX = (Math.random() * 2 - 1) * halfW * range;
+      state.r2TargetY = (Math.random() * 2 - 1) * halfH * range;
+      state.lastR2Change = state.time;
+    }
+    const k = 1 - Math.pow(0.78, dt * 60);
+    state.px += (state.r2TargetX - state.px) * k;
+    state.py += (state.r2TargetY - state.py) * k;
+  }
+  else if (name === 'Horizontal Saccades' && state.hBalls.length > 0) {
+    const xHalf = Math.min(halfW, 0.45 * SCREEN.w * range);
+    const left = -xHalf, right = xHalf;
+    const ball = state.hBalls[state.hCurrent];
+    ball.x += SACCADE_TRAVEL_RATE * s * ball.dir * dt;
+    if ((ball.dir === -1 && ball.x <= left) || (ball.dir === 1 && ball.x >= right)) {
+      ball.x = ball.dir === -1 ? left : right;
+      ball.dir *= -1;
+      state.hCurrent += state.hDirection;
+      if (state.hCurrent >= state.hBalls.length || state.hCurrent < 0) {
+        state.hDirection *= -1;
+        state.hCurrent += state.hDirection;
+      }
+    }
+  }
+  else if (name === 'Vertical Saccades' && state.vBalls.length > 0) {
+    const yHalf = Math.min(halfH, 0.45 * SCREEN.h * range);
+    const top = yHalf, bottom = -yHalf;
+    const ball = state.vBalls[state.vCurrent];
+    ball.y += VERTICAL_SACCADE_TRAVEL_RATE * s * SPEED_AS_IF_15_AT_DEFAULT_2 * ball.dir * dt;
+    if ((ball.dir === 1 && ball.y >= top) || (ball.dir === -1 && ball.y <= bottom)) {
+      ball.y = ball.dir === 1 ? top : bottom;
+      ball.dir *= -1;
+      state.vCurrent += state.vDirection;
+      if (state.vCurrent >= state.vBalls.length || state.vCurrent < 0) {
+        state.vDirection *= -1;
+        state.vCurrent += state.vDirection;
+      }
+    }
+  }
+  else if (name === 'Depth Pulse') {
+    // Just advance the oscillator here; the actual position is computed in applyToScene()
+    // because it depends on the live camera (= nose) position.
+    state.depthProgress += s * 1.08 * dt;
+  }
+  else if (name === '3D Random Snap') {
+    if (state.time - state.lastRandomJump > 1.9 / s) {
+      state.px = (Math.random() * 2 - 1) * halfW * range;
+      state.py = (Math.random() * 2 - 1) * halfH * range;
+      state.pz = randomDepthZ(range);
+      state.lastRandomJump = state.time;
+    }
+  }
+  else if (name === '3D Random 2') {
+    if (state.time - state.lastR2Change > 2.1 / s) {
+      state.r2TargetX = (Math.random() * 2 - 1) * halfW * range;
+      state.r2TargetY = (Math.random() * 2 - 1) * halfH * range;
+      state.r2TargetZ = randomDepthZ(range);
+      state.lastR2Change = state.time;
+    }
+    const k = 1 - Math.pow(0.78, dt * 60);
+    state.px += (state.r2TargetX - state.px) * k;
+    state.py += (state.r2TargetY - state.py) * k;
+    state.pz += (state.r2TargetZ - state.pz) * k;
+  }
+  else if (isPremium3DSaccade(name)) {
+    updatePremium3DSaccade(dt, s);
+  }
+
+  if (name === 'Depth Pulse') {
+    /* Depth Pulse: position computed in applyToScene(). */
+  } else if (routineClamps3DVolume(name) || isPremium3DSaccade(name)) {
+    clamp3DPosition(halfW, halfH, range);
+  } else if (name === 'Vertical' || name === 'Zigzag' || name === 'Vertical Zigzag') {
+    state.pz = 0;
+    state.px = Math.max(-halfW * range, Math.min(halfW * range, state.px));
+    const vAmp = verticalRoutineAmp(halfH, range);
+    state.py = Math.max(-vAmp, Math.min(vAmp, state.py));
+  } else {
+    state.pz = 0;
+    state.px = Math.max(-halfW, Math.min(halfW, state.px));
+    state.py = Math.max(-halfH, Math.min(halfH, state.py));
+  }
+}
+
+/* ------------------------------------------------------------------
+   Apply state to the scene (cheap per-frame ops only)
+------------------------------------------------------------------ */
+let _lastScale = -1;
+const _depthCamPos    = new THREE.Vector3();
+const _depthScreenPos = new THREE.Vector3();
+const _depthDir       = new THREE.Vector3();
+const _depthBallWorld = new THREE.Vector3();
+
+function applyToScene() {
+  const ball = document.querySelector('#ball');
+  if (!ball) return;
+  const r = ballRadiusMeters();
+  const scl = r * 2;
+  if (Math.abs(scl - _lastScale) > 0.0005) {
+    ball.object3D.scale.set(scl, scl, scl);
+    _lastScale = scl;
+  }
+
+  const name = routines[state.current];
+  const isMulti = routineIsMultiSaccade(name);
+  ball.object3D.visible = !isMulti;
+
+  if (isMulti) {
+    const list = (name === 'Horizontal Saccades') ? state.hBalls : state.vBalls;
+    const multi = document.querySelector('#multi-balls');
+    multi.childNodes.forEach((child, i) => {
+      if (!list[i] || !child.object3D) return;
+      child.object3D.position.set(list[i].x, list[i].y + BALL_Y_OFFSET, list[i].z || 0);
+    });
+    return;
+  }
+
+  if (name === 'Depth Pulse') {
+    // Trace a line from the live camera (nose) position to the screen center, and slide
+    // the ball along it. Closest point sits NEAR_NOSE_DIST in front of the camera, so when
+    // the ball comes "near" it really does come up to the user's nose, not their chest.
+    const sceneEl = document.querySelector('a-scene');
+    const cam     = sceneEl && sceneEl.camera;
+    const world   = document.querySelector('#world');
+    if (cam && world) {
+      cam.getWorldPosition(_depthCamPos);
+      world.object3D.getWorldPosition(_depthScreenPos);
+
+      _depthDir.subVectors(_depthScreenPos, _depthCamPos);
+      const farDist = _depthDir.length();
+      if (farDist > NEAR_NOSE_DIST + 0.01) {
+        _depthDir.divideScalar(farDist);
+        const tRaw = (Math.sin(state.depthProgress) + 1) / 2;        // 0..1 oscillation
+        const t    = tRaw * state.rangeScale;                         // path-range slider scales how close it gets
+        const farReach = farDist + DEPTH_PULSE_FAR_EXTRA * state.rangeScale;
+        const targetDist = (1 - t) * farReach + t * NEAR_NOSE_DIST;
+        _depthBallWorld.copy(_depthCamPos).addScaledVector(_depthDir, targetDist);
+        world.object3D.worldToLocal(_depthBallWorld);
+        ball.object3D.position.copy(_depthBallWorld);
+        return;
+      }
+    }
+  }
+
+  if (routineUsesCameraDepth(name)) {
+    applyCameraDepthBallPosition(ball, state.px, state.py, state.pz, state.rangeScale, {
+      pullNear: isPremium3DSaccade(name)
+    });
+  } else {
+    ball.object3D.position.set(state.px, state.py + BALL_Y_OFFSET, state.pz);
+  }
+}
+
+/* ------------------------------------------------------------------
+   HUD / UI helpers — only DOM-update on actual change
+------------------------------------------------------------------ */
+const els = {
+  routineName:     document.getElementById('routineName'),
+  speedDisplay:    document.getElementById('speedDisplay'),
+  rangeDisplay:    document.getElementById('rangeDisplay'),
+  sessionDisplay:  document.getElementById('sessionDisplay'),
+  speedSlider:     document.getElementById('speed'),
+  sizeSlider:      document.getElementById('size'),
+  pathRangeSlider: document.getElementById('pathRange'),
+  routineSelect:   document.getElementById('routineSelect'),
+  dotColorSelect:  document.getElementById('dotColor'),
+  eyeModeSelect:   document.getElementById('eyeMode'),
+  pauseBtn:        document.getElementById('pauseBtn'),
+  enterVrBtn:      document.getElementById('enterVrBtn'),
+  recenterBtn:     document.getElementById('recenterBtn'),
+  vrRoutineLabel:  document.getElementById('vrRoutineLabel'),
+  vrInfoLabel:     document.getElementById('vrInfoLabel'),
+  vrSpeedVal:      document.getElementById('vrSpeedVal'),
+  vrSizeVal:       document.getElementById('vrSizeVal'),
+  vrRangeVal:      document.getElementById('vrRangeVal'),
+  vrPauseLabel:    document.getElementById('vrPauseLabel'),
+  vrColorActive:   document.getElementById('vrColorActive'),
+  vrEyeActive:     document.getElementById('vrEyeActive'),
+  vrBgActive:      document.getElementById('vrBgActive'),
+  vrPanel:         document.getElementById('vr-panel')
+};
+
+/* X positions of the 4 color swatches in panel-local space — used to move the highlight. */
+const COLOR_X = { red: -0.34, royalBlue: -0.21, deepGreen: -0.08, cyan: 0.05, white: 0.18 };
+const EYE_X   = { both: -0.32, left: -0.07, right: 0.18 };
+const BG_X    = { black: 0.795, white: 0.885, royalBlue: 0.795, peach: 0.885, red: 0.795, green: 0.885 };
+const BG_Y    = { black: 0.28, white: 0.28, royalBlue: 0.18, peach: 0.18, red: 0.08, green: 0.08 };
+let _lastBgMode = '';
+let _lastPalette = null;
+let _lastEyeMode = null;
+
+routines.forEach((name, i) => {
+  const o = document.createElement('option');
+  o.value = String(i);
+  o.textContent = name;
+  els.routineSelect.appendChild(o);
+});
+
+function updateSliderFill(slider) {
+  const percent = ((+slider.value - +slider.min) / (+slider.max - +slider.min)) * 100;
+  slider.style.setProperty('--value-percent', percent + '%');
+}
+
+/* setText / setHtml only touch the DOM when the value really changed.
+   This stops a-text from re-tessellating its SDF mesh on every frame. */
+function setHtml(el, value) {
+  if (!el) return;
+  if (el.__last === value) return;
+  el.__last = value;
+  el.textContent = value;
+}
+function setVrText(el, value) {
+  if (!el) return;
+  if (el.__last === value) return;
+  el.__last = value;
+  el.setAttribute('value', value);
+}
+
+function syncHud() {
+  setHtml(els.routineName,    routines[state.current]);
+  setHtml(els.speedDisplay,   state.speed.toFixed(1));
+  setHtml(els.rangeDisplay,   String(Math.round(state.rangeScale * 100)));
+  setHtml(els.sessionDisplay, formatSession(state.sessionSec));
+  setHtml(els.pauseBtn,       state.paused ? 'Resume' : 'Pause');
+
+  const routineTitle = routines[state.current];
+  syncVrRoutineLabelLayout(routineTitle);
+  setVrText(els.vrInfoLabel,
+    `Speed ${state.speed.toFixed(1)}          ·          ${formatSession(state.sessionSec)}`);
+  setVrText(els.vrSpeedVal,    state.speed.toFixed(1));
+  setVrText(els.vrSizeVal,     String(state.dotSize));
+  setVrText(els.vrRangeVal,    Math.round(state.rangeScale * 100) + '%');
+  setVrText(els.vrPauseLabel,  state.paused ? 'Play' : 'Pause');
+
+  // Move the highlight box behind whichever color swatch is currently selected.
+  if (els.vrColorActive && state.paletteKey !== _lastPalette) {
+    const x = COLOR_X[state.paletteKey];
+    if (typeof x === 'number') els.vrColorActive.object3D.position.x = x;
+    _lastPalette = state.paletteKey;
+  }
+
+  // Same for the active eye-mode highlight.
+  if (els.vrEyeActive && state.eyeMode !== _lastEyeMode) {
+    const x = EYE_X[state.eyeMode];
+    if (typeof x === 'number') els.vrEyeActive.object3D.position.x = x;
+    _lastEyeMode = state.eyeMode;
+  }
+
+  if (els.vrBgActive && state.bgMode !== _lastBgMode) {
+    const x = BG_X[state.bgMode];
+    const y = BG_Y[state.bgMode];
+    if (typeof x === 'number') els.vrBgActive.object3D.position.x = x;
+    if (typeof y === 'number') els.vrBgActive.object3D.position.y = y;
+    _lastBgMode = state.bgMode;
+  }
+}
+
+function formatSession(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/* ------------------------------------------------------------------
+   Public actions
+------------------------------------------------------------------ */
+function setSpeed(v) {
+  state.speed = Math.round(Math.max(0.5, Math.min(12, v)) * 10) / 10;
+  els.speedSlider.value = state.speed.toFixed(1);
+  updateSliderFill(els.speedSlider);
+}
+function setSize(v) {
+  state.dotSize = Math.max(12, Math.min(80, v));
+  els.sizeSlider.value = String(state.dotSize);
+  updateSliderFill(els.sizeSlider);
+  const name = routines[state.current];
+  if (routineIsMultiSaccade(name)) rebuildMultiBalls();
+}
+function setRange(v) {
+  state.rangeScale = Math.max(RANGE_MIN_PCT / 100, Math.min(RANGE_MAX_PCT / 100, v / 100));
+  els.pathRangeSlider.value = String(Math.round(state.rangeScale * 100));
+  updateSliderFill(els.pathRangeSlider);
+  const name = routines[state.current];
+  if (routineIsMultiSaccade(name) || isPremium3DSaccade(name)) resetRoutine();
+}
+function setPalette(key) {
+  if (!palettes[key]) key = 'red';
+  state.paletteKey = key;
+  if (els.dotColorSelect) els.dotColorSelect.value = key;
+  applyPalette();
+}
+
+function setSceneBackground(mode) {
+  if (!SCENE_BG[mode]) mode = 'black';
+  state.bgMode = mode;
+  const hex = SCENE_BG[mode];
+  const scene = document.querySelector('a-scene');
+  if (scene) scene.setAttribute('background', 'color', hex);
+  document.body.style.background = hex;
+  syncHud();
+}
+
+function setEyeMode(mode) {
+  if (mode !== 'both' && mode !== 'left' && mode !== 'right') mode = 'both';
+  state.eyeMode = mode;
+  if (els.eyeModeSelect) els.eyeModeSelect.value = mode;
+  applyEyeLayers(true);
+}
+function goNext() { state.current = (state.current + 1) % routines.length;          els.routineSelect.value = String(state.current); resetRoutine(); }
+function goPrev() { state.current = (state.current - 1 + routines.length) % routines.length; els.routineSelect.value = String(state.current); resetRoutine(); }
+function togglePause() { state.paused = !state.paused; }
+function toggleVrPanel() {
+  const p = document.getElementById('vr-panel');
+  if (!p) return;
+  p.object3D.visible = !p.object3D.visible;
+}
+
+/* ------------------------------------------------------------------
+   Bind HTML overlay
+------------------------------------------------------------------ */
+els.speedSlider    .addEventListener('input',  e => setSpeed(+e.target.value));
+els.sizeSlider     .addEventListener('input',  e => setSize(+e.target.value));
+els.pathRangeSlider.addEventListener('input',  e => setRange(+e.target.value));
+els.dotColorSelect .addEventListener('change', () => setPalette(els.dotColorSelect.value));
+els.eyeModeSelect  .addEventListener('change', () => setEyeMode(els.eyeModeSelect.value));
+els.routineSelect  .addEventListener('change', () => { state.current = +els.routineSelect.value; resetRoutine(); });
+document.getElementById('next').onclick = goNext;
+document.getElementById('prev').onclick = goPrev;
+els.pauseBtn   .addEventListener('click', togglePause);
+els.recenterBtn.addEventListener('click', recenterWorld);
+els.enterVrBtn .addEventListener('click', () => {
+  const scene = document.querySelector('a-scene');
+  if (scene && scene.enterVR) scene.enterVR();
+});
+
+window.addEventListener('keydown', e => {
+  const onForm = e.target && e.target.closest && e.target.closest('input, select, textarea');
+  if (onForm) return;
+  if (e.key === 'ArrowRight') goNext();
+  else if (e.key === 'ArrowLeft') goPrev();
+  else if (e.key === ' ') { e.preventDefault(); togglePause(); }
+  else if (e.key === 'ArrowUp') setSpeed(state.speed + SPEED_STEP);
+  else if (e.key === 'ArrowDown') setSpeed(state.speed - SPEED_STEP);
+  else if (e.key === 'r' || e.key === 'R') recenterWorld();
+  else if (e.key === 'm' || e.key === 'M') toggleVrPanel();
+  else if (e.key === 'h' || e.key === 'H') document.getElementById('overlay').classList.toggle('hidden');
+  else if (e.key === 'v' || e.key === 'V') {
+    const scene = document.querySelector('a-scene');
+    if (scene && !scene.is('vr-mode') && scene.enterVR) scene.enterVR();
+  }
+});
+
+/* ------------------------------------------------------------------
+   Boot
+------------------------------------------------------------------ */
+updateSliderFill(els.speedSlider);
+updateSliderFill(els.sizeSlider);
+updateSliderFill(els.pathRangeSlider);
+resetRoutine();
+syncHud();
+
+// Re-apply palette + eye layers once the scene has finished loading the ball meshes.
+const _scene = document.querySelector('a-scene');
+function _initOnSceneReady() {
+  applyBallVisuals();
+  if (USE_PREMIUM_PANEL_TEST) applyPremiumPanelVisuals();
+  setSceneBackground(state.bgMode || 'black');
+  applyPalette();
+  bindVrPanelUi();
+  bindControllerTriggerUi();
+  syncVrRaycasterLayers();
+  applyEyeLayers(true);
+  syncVrRoutineLabelLayout(routines[state.current]);
+}
+if (_scene) {
+  if (_scene.hasLoaded) _initOnSceneReady();
+  else _scene.addEventListener('loaded', _initOnSceneReady);
+}
+
+/* ------------------------------------------------------------------
+   Auto-enter immersive VR when launched as an installed PWA (Meta Quest).
+   Meta treats the app-icon launch as the user activation, so requestSession
+   is permitted here. In a normal browser tab we do NOT auto-enter (there is
+   no user gesture) and the existing VR button / "V" key behaviour is kept.
+------------------------------------------------------------------ */
+(function autoEnterVrIfInstalled() {
+  var mm = window.matchMedia;
+  var isInstalledPWA =
+    (mm && (mm('(display-mode: standalone)').matches ||
+            mm('(display-mode: immersive)').matches ||
+            mm('(display-mode: fullscreen)').matches)) ||
+    window.navigator.standalone === true;
+  if (!isInstalledPWA) return;
+
+  function enterWhenReady() {
+    var scene = document.querySelector('a-scene');
+    if (!scene) return;
+    var go = function () {
+      if (scene.is('vr-mode') || !scene.enterVR) return;
+      var p = scene.enterVR();
+      if (p && p.catch) {
+        p.catch(function () {
+          // Auto-launch blocked: fall back to entering on first interaction.
+          var once = function () {
+            window.removeEventListener('pointerdown', once);
+            window.removeEventListener('keydown', once);
+            if (!scene.is('vr-mode') && scene.enterVR) scene.enterVR();
+          };
+          window.addEventListener('pointerdown', once, { once: true });
+          window.addEventListener('keydown', once, { once: true });
+        });
+      }
+    };
+    if (scene.hasLoaded) go();
+    else scene.addEventListener('loaded', go);
+  }
+
+  if (navigator.xr && navigator.xr.isSessionSupported) {
+    navigator.xr.isSessionSupported('immersive-vr')
+      .then(function (ok) { if (ok) enterWhenReady(); })
+      .catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

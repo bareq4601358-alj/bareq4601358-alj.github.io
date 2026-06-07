@@ -1,0 +1,25 @@
+{
+  "name": "Vision Training VR",
+  "short_name": "Vision VR",
+  "description": "Vision training in virtual reality",
+  "start_url": "https://bareq4601358-alj.github.io/",
+  "scope": "https://bareq4601358-alj.github.io/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#08080c",
+  "theme_color": "#08080c",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
